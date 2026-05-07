@@ -342,3 +342,206 @@ Keep future scaling work additive. Do not entangle today’s runtime graph with 
   - market data provider issues
 
 If a user request conflicts with this guide, follow the user’s explicit request and preserve as much of the architecture discipline as possible.
+
+## Session Summary
+
+This section summarizes what has already been implemented in the current repository so future AI-assisted work can start from the real project state instead of the original empty scaffold assumptions.
+
+### Completed In This Session
+
+The following areas were implemented or substantially refactored:
+
+- project scaffold for:
+  - `apps/api`
+  - `apps/worker`
+  - `agents`
+  - `graph`
+  - `services`
+  - `db`
+  - `rag`
+  - `models`
+  - `configs`
+- LangGraph orchestration:
+  - typed graph state
+  - explicit builder module
+  - parallel fan-out from `data_agent`
+  - convergence into `decision_agent`
+  - `alert_agent` as final node
+- agents implemented:
+  - `data_agent`
+  - `technical_agent`
+  - `fundamental_agent`
+  - `sentiment_agent`
+  - `prediction_agent`
+  - `decision_agent`
+  - `alert_agent`
+- FastAPI API:
+  - `GET /v1/analyze/{symbol}`
+  - `GET /healthz`
+  - structured responses
+  - logging and exception handling
+- worker scaffold for queued analysis execution
+- Docker infrastructure:
+  - multi-stage `Dockerfile`
+  - `docker-compose.yml`
+  - `.env.example`
+- centralized settings in `configs/settings.py`
+- prediction integration with local PyTorch model loading and fallback behavior
+- RAG skeleton:
+  - ingestion service
+  - retrieval abstraction
+  - Ollama embeddings integration
+- test skeleton:
+  - pytest config
+  - unit tests
+  - agent tests
+  - graph tests
+- production-oriented refactor:
+  - shared Pydantic schemas
+  - centralized runtime wiring
+  - explicit exception classes
+  - basic retry helper
+  - improved logging
+  - stronger DB session handling
+  - removal of obsolete `decision_parser.py`
+- future scaffolding added for:
+  - Kubernetes deployment
+  - async ingestion
+  - websocket streaming
+  - backtesting engine
+
+### Current Real State Of The Codebase
+
+Important facts about the repo right now:
+
+- `decision_agent` owns the effective deterministic scoring logic.
+- `services/decision_parser.py` was removed and should not be reintroduced unless there is a very clear architectural reason.
+- technical indicator output is nested and structured, not flat.
+- prediction output explicitly marks itself as:
+  - auxiliary signal
+  - not final decision
+- RAG exists as a skeleton only. It is not yet wired into decision flow.
+- Kubernetes manifests exist only as a starter deployment baseline.
+- worker flow exists, but queue semantics and retry/dead-letter behavior are not yet production-complete.
+
+## Known Gaps And Unclear Areas
+
+The following parts are still incomplete, approximate, or need clarification before being considered production-ready:
+
+### Fundamentals
+
+- `fundamental_agent` currently depends on a placeholder deterministic estimator.
+- No real audited financial data source is integrated yet.
+- Before real usage, replace placeholder logic with a real provider and validation strategy.
+
+### Prediction Model Contract
+
+- the `.pt` loader currently supports:
+  - serialized `nn.Module`
+  - compatible `state_dict`
+- the real training architecture contract is still not formally documented
+- if the actual model architecture differs, the loader will need a model-specific adapter
+
+### Decision Logic
+
+- deterministic decision weights are currently heuristic starter weights
+- there is no formal calibration process yet for:
+  - score thresholds
+  - confidence mapping
+  - risk level mapping
+- if business logic changes, update tests and this guide together
+
+### Market Data And Sentiment Reliability
+
+- market data currently uses `yfinance`
+- sentiment currently uses local LLM estimation only
+- neither path should be treated as institution-grade data quality yet
+
+### RAG Integration
+
+- RAG is not connected to:
+  - `decision_agent`
+  - API responses
+  - report generation
+- Qdrant/Chroma adapters are placeholders behind a clean interface
+
+### Async And Streaming
+
+- async ingestion coordinator is a scaffold, not a working job system
+- websocket streaming broker is in-memory only and not yet exposed as API routes
+- there is no persistent pub/sub integration yet
+
+### Kubernetes
+
+- starter manifests exist, but still missing:
+  - Secret management
+  - Ingress
+  - worker deployment
+  - HPA
+  - per-environment overlays
+
+## Areas That Likely Need Further Editing
+
+Future contributors or AI agents should expect follow-up changes in these modules:
+
+- `services/fundamental_service.py`
+  - replace placeholder logic
+- `services/prediction_model.py`
+  - align with actual model artifact contract
+- `agents/decision_agent.py`
+  - calibrate score weights and improve reasoning contract
+- `rag/retriever.py`
+  - replace in-memory fallback with real backend adapter
+- `services/market_data.py`
+  - improve provider abstraction and resilience
+- `apps/worker/main.py`
+  - improve queue handling, retry policies, and poison-message handling
+- `k8s/`
+  - expand manifests beyond starter deployment
+
+## Recommended Next Improvements
+
+Priority follow-up work:
+
+1. Replace placeholder fundamentals with real financial data integration.
+2. Define the actual PyTorch model interface and training/inference compatibility contract.
+3. Add real pytest execution coverage for:
+   - API routes
+   - storage layer
+   - runtime wiring
+4. Add proper worker deployment and queue reliability model.
+5. Wire RAG retrieval into a non-decision explanation/reporting path first.
+6. Add websocket endpoints for streaming analysis progress and events.
+7. Introduce backtesting replay using historical snapshots before tuning decision weights.
+
+## Extension Opportunities
+
+The architecture is already positioned to support the following expansions:
+
+- multi-symbol batch analysis
+- portfolio-aware scoring
+- historical comparison and memory-aware decision support
+- richer alert channels:
+  - websocket
+  - email
+  - Slack
+  - webhook
+- document-backed research summaries via RAG
+- model registry and version tracking
+- backtesting and strategy analytics
+- human review workflows for low-confidence or high-risk outputs
+- distributed ingestion and streaming pipelines
+
+## Guidance For Future AI Edits
+
+When continuing from this repo state:
+
+- do not assume the project is still at scaffold stage
+- read the current code before adding duplicate abstractions
+- prefer extending the runtime/service boundaries already added in this session
+- avoid reintroducing deleted legacy paths unless explicitly requested
+- update this guide again if a future session materially changes:
+  - graph topology
+  - decision logic ownership
+  - prediction contract
+  - deployment model
