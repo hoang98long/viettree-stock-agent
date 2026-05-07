@@ -1,59 +1,128 @@
 version: "3.9"
 
-services:
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile.api
-    env_file:
-      - .env.example
-    ports:
-      - "8000:8000"
-    depends_on:
-      - redis
-      - postgres
-      - ollama
-    volumes:
-      - ./:/app
+name: stock-agent-ai
 
-  worker:
+services:
+  app:
     build:
       context: .
-      dockerfile: Dockerfile.worker
+      dockerfile: Dockerfile
+      target: development
+    container_name: stock-agent-app
+    command:
+      [
+        "uvicorn",
+        "apps.api.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--reload"
+      ]
     env_file:
-      - .env.example
-    depends_on:
-      - redis
-      - postgres
-      - ollama
+      - .env
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      APP_HOST: 0.0.0.0
+      APP_PORT: ${APP_PORT:-8000}
+      APP_RELOAD: ${APP_RELOAD:-true}
+      POSTGRES_URL: ${POSTGRES_URL:-postgresql+psycopg2://stock:stock@postgres:5432/stock_agent}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
     volumes:
       - ./:/app
+      - pip_cache:/root/.cache/pip
+      - app_runtime:/app/runtime
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - app_net
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.2-alpine
+    container_name: stock-agent-redis
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1000"]
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - app_net
 
   postgres:
     image: postgres:16-alpine
+    container_name: stock-agent-postgres
     environment:
-      POSTGRES_DB: stock_agent
-      POSTGRES_USER: stock
-      POSTGRES_PASSWORD: stock
+      POSTGRES_DB: ${POSTGRES_DB:-stock_agent}
+      POSTGRES_USER: ${POSTGRES_USER:-stock}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-stock}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./db/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-stock} -d ${POSTGRES_DB:-stock_agent}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - app_net
+
+  qdrant:
+    image: qdrant/qdrant:v1.13.4
+    container_name: stock-agent-qdrant
+    profiles: ["optional"]
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+    networks:
+      - app_net
 
   ollama:
     image: ollama/ollama:latest
+    container_name: stock-agent-ollama
+    profiles: ["optional"]
     ports:
-      - "11434:11434"
+      - "${OLLAMA_PORT:-11434}:11434"
     volumes:
       - ollama_data:/root/.ollama
-    # TODO: Pre-pull the target model during deployment bootstrap.
+    restart: unless-stopped
+    networks:
+      - app_net
+
+networks:
+  app_net:
+    driver: bridge
 
 volumes:
+  app_runtime:
+  pip_cache:
   postgres_data:
+  redis_data:
+  qdrant_data:
   ollama_data:

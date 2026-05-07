@@ -9,7 +9,7 @@ from agents.fundamental_agent import FundamentalAgent
 from agents.prediction_agent import PredictionAgent
 from agents.sentiment_agent import SentimentAgent
 from agents.technical_agent import TechnicalAgent
-from graph.builder import build_analysis_graph
+from graph.graph_builder import build_analysis_graph
 from graph.state import StockAnalysisState
 from services.config import Settings
 from services.decision_parser import DecisionEngine
