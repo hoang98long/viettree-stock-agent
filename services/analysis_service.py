@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from agents.alert_agent import AlertAgent
 from agents.data_agent import DataAgent
 from agents.decision_agent import DecisionAgent
@@ -11,8 +13,9 @@ from agents.sentiment_agent import SentimentAgent
 from agents.technical_agent import TechnicalAgent
 from graph.graph_builder import build_analysis_graph
 from graph.state import StockAnalysisState
+from schemas.analysis import AnalysisOptions, AnalysisResult
 from services.config import Settings
-from services.decision_parser import DecisionEngine
+from services.exceptions import ValidationError
 from services.fundamental_service import FundamentalAnalysisService
 from services.indicator_service import TechnicalIndicatorService
 from services.llm import OllamaClientFactory
@@ -20,6 +23,8 @@ from services.market_data import MarketDataService
 from services.prediction_model import PredictionModelService
 from services.sentiment_service import SentimentAnalysisService
 from services.storage import AnalysisStorageService
+
+LOGGER = logging.getLogger(__name__)
 
 
 class AnalysisService:
@@ -47,10 +52,7 @@ class AnalysisService:
             fundamental_agent=FundamentalAgent(FundamentalAnalysisService()),
             sentiment_agent=SentimentAgent(sentiment_service),
             prediction_agent=PredictionAgent(prediction_service),
-            decision_agent=DecisionAgent(
-                llm_factory=llm_factory,
-                decision_engine=DecisionEngine(settings=settings),
-            ),
+            decision_agent=DecisionAgent(llm_factory=llm_factory),
             alert_agent=AlertAgent(),
         )
 
@@ -65,10 +67,35 @@ class AnalysisService:
     ) -> dict:
         normalized_symbol = symbol.strip().upper()
         if not normalized_symbol:
-            raise ValueError("symbol must not be empty")
+            raise ValidationError("symbol must not be empty")
 
-        initial_state: StockAnalysisState = {
-            "symbol": normalized_symbol,
+        options = AnalysisOptions(
+            lookback_days=lookback_days,
+            include_fundamentals=include_fundamentals,
+            include_sentiment=include_sentiment,
+            include_prediction=include_prediction,
+        )
+        LOGGER.info("analysis started symbol=%s", normalized_symbol)
+
+        initial_state = self._build_initial_state(normalized_symbol, options)
+        result = self.graph.invoke(initial_state)
+        parsed = AnalysisResult.model_validate(result)
+        self.storage_service.persist_analysis(parsed.model_dump())
+        LOGGER.info(
+            "analysis finished symbol=%s action=%s confidence=%s",
+            parsed.symbol,
+            parsed.decision.get("action"),
+            parsed.decision.get("confidence"),
+        )
+        return parsed.model_dump()
+
+    def _build_initial_state(
+        self,
+        symbol: str,
+        options: AnalysisOptions,
+    ) -> StockAnalysisState:
+        return {
+            "symbol": symbol,
             "price_data": {},
             "indicators": {},
             "fundamentals": {},
@@ -77,14 +104,13 @@ class AnalysisService:
             "decision": {},
             "alerts": [],
             "metadata": {
-                "lookback_days": lookback_days,
-                "include_fundamentals": include_fundamentals,
-                "include_sentiment": include_sentiment,
-                "include_prediction": include_prediction,
+                "lookback_days": options.lookback_days,
+                "include_fundamentals": options.include_fundamentals,
+                "include_sentiment": options.include_sentiment,
+                "include_prediction": options.include_prediction,
                 "architecture": "agentic+ml+rag-ready",
+                "async_ingestion_ready": True,
+                "websocket_streaming_ready": True,
+                "backtesting_ready": True,
             },
         }
-
-        result = self.graph.invoke(initial_state)
-        self.storage_service.persist_analysis(result)
-        return result

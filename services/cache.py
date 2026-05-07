@@ -33,7 +33,11 @@ class RedisCache:
         except redis.RedisError:
             LOGGER.exception("redis get failed key=%s", key)
             return None
-        return json.loads(payload) if payload else None
+        try:
+            return json.loads(payload) if payload else None
+        except json.JSONDecodeError:
+            LOGGER.exception("redis payload decode failed key=%s", key)
+            return None
 
     def set_json(self, key: str, value: dict[str, Any], ttl_seconds: int) -> None:
         try:

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 
 from apps.api.dependencies import get_analysis_service
 from apps.api.schemas import AnalysisResponse, ErrorResponse
+from services.exceptions import ValidationError
 from services.analysis_service import AnalysisService
 
 LOGGER = logging.getLogger(__name__)
@@ -49,7 +50,7 @@ async def analyze_stock(
             include_sentiment=include_sentiment,
             include_prediction=include_prediction,
         )
-    except ValueError as exc:
+    except ValidationError as exc:
         LOGGER.warning("analysis rejected symbol=%s error=%s", normalized_symbol, exc)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

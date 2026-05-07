@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: stock-agent-config
+data:
+  APP_ENV: "production"
+  APP_NAME: "stock-agent-ai"
+  APP_HOST: "0.0.0.0"
+  APP_PORT: "8000"
+  APP_RELOAD: "false"
+  REDIS_ANALYSIS_QUEUE: "stock-analysis-requests"
+  MARKET_DATA_CACHE_TTL_SECONDS: "300"
+  PREDICTION_SEQUENCE_LENGTH: "30"
+  RAG_ENABLED: "false"

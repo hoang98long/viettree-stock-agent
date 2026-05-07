@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import json
+import logging
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from services.config import Settings
 from services.llm import OllamaClientFactory
+from services.retry import retry_sync
+
+LOGGER = logging.getLogger(__name__)
 
 
 class SentimentAnalysisService:
@@ -22,7 +26,9 @@ class SentimentAnalysisService:
         self.settings = settings
         self.llm_factory = llm_factory
 
+    @retry_sync(attempts=2, delay_seconds=0.25, retry_on=(Exception,))
     def analyze_symbol(self, symbol: str) -> dict:
+        LOGGER.info("running sentiment analysis symbol=%s", symbol)
         llm = self.llm_factory.build_reasoning_llm()
         response = llm.invoke(
             [
@@ -51,7 +57,7 @@ class SentimentAnalysisService:
             score = 0.0
         score = max(min(float(score), 1.0), -1.0)
 
-        return {
+        result = {
             "sentiment": parsed.get("sentiment", "neutral"),
             "score": score,
             "summary": parsed.get(
@@ -60,3 +66,5 @@ class SentimentAnalysisService:
             ),
             "status": "ok" if parsed else "fallback",
         }
+        LOGGER.info("sentiment analysis completed symbol=%s status=%s", symbol, result["status"])
+        return result
